@@ -472,8 +472,39 @@
     const backdrop = modal?.querySelector('.activity-modal-backdrop');
     let chartRendered = false;
 
+    // Plugin: at each visible x-axis tick, draw a vertical line from the
+    // chart's bottom up to the data line's y-value at that index.
+    const dropLinesPlugin = {
+      id: 'dropLines',
+      afterDatasetsDraw(chart) {
+        const { ctx, scales } = chart;
+        const xScale = scales.x;
+        const yScale = scales.y;
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !xScale || !yScale) return;
+        const rootStyles = getComputedStyle(document.documentElement);
+        const lineCol = rootStyles.getPropertyValue('--chart-grid-color').trim() || 'rgba(148, 163, 184, 0.45)';
+        ctx.save();
+        ctx.strokeStyle = lineCol;
+        ctx.lineWidth = 1;
+        for (const tick of xScale.ticks) {
+          const idx = tick.value;
+          const point = meta.data[idx];
+          if (!point) continue;
+          const px = xScale.getPixelForTick(xScale.ticks.indexOf(tick));
+          ctx.beginPath();
+          ctx.moveTo(px, yScale.bottom);
+          ctx.lineTo(px, point.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      },
+    };
+
     function renderChart() {
-      const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
+      const rootStyles = getComputedStyle(document.documentElement);
+      const textColor = rootStyles.getPropertyValue('--text-color').trim() || '#333';
+      const gridColor = rootStyles.getPropertyValue('--chart-grid-color').trim() || 'rgba(148, 163, 184, 0.25)';
       const canvas = document.getElementById('communityRollingChart');
       if (!canvas) return;
       new Chart(canvas, {
@@ -497,10 +528,11 @@
           animation: false,
           plugins: { legend: { display: false }, tooltip: { enabled: true } },
           scales: {
-            x: { ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-            y: { beginAtZero: true, ticks: { color: textColor, precision: 0 } },
+            x: { grid: { display: false }, ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+            y: { beginAtZero: true, grid: { display: false }, ticks: { color: textColor, precision: 0 } },
           },
         },
+        plugins: [dropLinesPlugin],
       });
     }
 
@@ -983,8 +1015,10 @@
       const labels = points.map(p => fmtDate(p.date));
       const values = points.map(p => p.total || 0);
 
-      const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
-      const lineColor = getComputedStyle(document.documentElement).getPropertyValue('--link-color').trim() || '#2da44e';
+      const rootStyles = getComputedStyle(document.documentElement);
+      const textColor = rootStyles.getPropertyValue('--text-color').trim() || '#333';
+      const lineColor = rootStyles.getPropertyValue('--link-color').trim() || '#2da44e';
+      const gridColor = rootStyles.getPropertyValue('--chart-grid-color').trim() || 'rgba(148, 163, 184, 0.25)';
 
       rollingChart = new Chart(canvas, {
         type: 'line',
@@ -1007,10 +1041,32 @@
           animation: false,
           plugins: { legend: { display: false }, tooltip: { enabled: true } },
           scales: {
-            x: { ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-            y: { beginAtZero: true, ticks: { color: textColor, precision: 0 } },
+            x: { grid: { display: false }, ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+            y: { beginAtZero: true, grid: { display: false }, ticks: { color: textColor, precision: 0 } },
           },
         },
+        plugins: [{
+          id: 'dropLines',
+          afterDatasetsDraw(chart) {
+            const xs = chart.scales.x;
+            const ys = chart.scales.y;
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !xs || !ys) return;
+            chart.ctx.save();
+            chart.ctx.strokeStyle = gridColor;
+            chart.ctx.lineWidth = 1;
+            for (const tick of xs.ticks) {
+              const point = meta.data[tick.value];
+              if (!point) continue;
+              const px = xs.getPixelForTick(xs.ticks.indexOf(tick));
+              chart.ctx.beginPath();
+              chart.ctx.moveTo(px, ys.bottom);
+              chart.ctx.lineTo(px, point.y);
+              chart.ctx.stroke();
+            }
+            chart.ctx.restore();
+          },
+        }],
       });
     }
 
